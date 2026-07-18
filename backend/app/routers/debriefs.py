@@ -1,7 +1,9 @@
 """API endpoints for post-mission debriefs (see CONTRACT.md)."""
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlmodel import Session, select
 
 from app.db.session import get_session
@@ -12,14 +14,47 @@ from app.services.summary import generate_summary
 router = APIRouter(prefix="/api/debriefs", tags=["debriefs"])
 
 
+def _require_non_empty(value: str, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must not be empty")
+    return value.strip()
+
+
 class CreateDebriefRequest(BaseModel):
     operator_name: str
     mission_name: str
     mission_date: str
 
+    @field_validator("operator_name")
+    @classmethod
+    def _validate_operator_name(cls, v: str) -> str:
+        return _require_non_empty(v, "operator_name")
+
+    @field_validator("mission_name")
+    @classmethod
+    def _validate_mission_name(cls, v: str) -> str:
+        return _require_non_empty(v, "mission_name")
+
+    @field_validator("mission_date")
+    @classmethod
+    def _validate_mission_date(cls, v: str) -> str:
+        v = _require_non_empty(v, "mission_date")
+        try:
+            date.fromisoformat(v)
+        except ValueError:
+            raise ValueError(
+                "mission_date must be a valid ISO date (YYYY-MM-DD)"
+            )
+        return v
+
 
 class AnswerRequest(BaseModel):
     answer_text: str
+
+    @field_validator("answer_text")
+    @classmethod
+    def _validate_answer_text(cls, v: str) -> str:
+        return _require_non_empty(v, "answer_text")
 
 
 def _serialize_turn(turn: DebriefTurn) -> dict:
