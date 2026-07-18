@@ -14,31 +14,82 @@ import { Transcript } from "../components/Transcript";
 import { ErrorNotice, InlineSpinner, Loading } from "../components/States";
 import { useDocumentTitle } from "../lib/useDocumentTitle";
 
-interface PersistedState {
+interface DerivedQuestion {
   current: CurrentQuestion;
   progressCurrent: number;
   isFollowup: boolean;
 }
 
-function stateKey(id: string): string {
-  return `debrief:${id}:state`;
+// --- sessionStorage: same-session UI convenience ONLY ---------------------
+// It caches the operator's in-progress typed answer so a refresh mid-typing
+// doesn't lose it. It is NEVER used to decide which topic/question is current
+// — that is always derived from the backend's turns array (source of truth).
+
+function draftKey(id: string): string {
+  return `debrief:${id}:draft`;
 }
 
-function loadPersisted(id: string): PersistedState | null {
+function loadDraft(id: string): string {
   try {
-    const raw = sessionStorage.getItem(stateKey(id));
-    return raw ? (JSON.parse(raw) as PersistedState) : null;
+    return sessionStorage.getItem(draftKey(id)) ?? "";
   } catch {
-    return null;
+    return "";
   }
 }
 
-function persist(id: string, state: PersistedState): void {
+function saveDraft(id: string, text: string): void {
   try {
-    sessionStorage.setItem(stateKey(id), JSON.stringify(state));
+    if (text) sessionStorage.setItem(draftKey(id), text);
+    else sessionStorage.removeItem(draftKey(id));
   } catch {
-    /* non-fatal: refresh recovery degrades to reconstruction */
+    /* non-fatal */
   }
+}
+
+function clearDraft(id: string): void {
+  try {
+    sessionStorage.removeItem(draftKey(id));
+  } catch {
+    /* non-fatal */
+  }
+}
+
+// Removes any entry from the legacy scheme that cached the current question.
+// Trusting that cache over the turns array was the bug (stale state leaking
+// into a reused debrief id after a DB reset).
+function clearLegacyState(id: string): void {
+  try {
+    sessionStorage.removeItem(`debrief:${id}:state`);
+  } catch {
+    /* non-fatal */
+  }
+}
+
+function hasAnswer(turn: Turn): boolean {
+  return turn.answer_text != null && turn.answer_text.trim() !== "";
+}
+
+/**
+ * Derive the current pending question from the backend's turns array — the
+ * single source of truth. Empty turns => topic 1. A trailing turn with no
+ * answer_text is the current pending question (its topic/text/is_followup are
+ * authoritative). Otherwise (all answered, not yet complete) fall back to the
+ * next primary question.
+ */
+function deriveCurrentFromTurns(turns: Turn[]): DerivedQuestion {
+  const pending = turns.find((t) => !hasAnswer(t));
+  if (pending) {
+    return {
+      current: { topic: pending.topic, question_text: pending.question_text },
+      progressCurrent: topicIndex(pending.topic) || 1,
+      isFollowup: pending.is_followup,
+    };
+  }
+  // No pending turn: empty turns resolve to topic 1; all-answered resolves to
+  // the next primary. reconstructCurrent handles both via the answered set.
+  const answeredTopics = new Set(turns.map((t) => t.topic));
+  const { current, progressCurrent } = reconstructCurrent(answeredTopics);
+  return { current, progressCurrent, isFollowup: false };
 }
 
 export function Interview() {
@@ -61,7 +112,8 @@ export function Interview() {
 
   useDocumentTitle(detail?.mission_name ?? null);
 
-  // Initial load: hydrate transcript + resolve the pending question.
+  // Initial load: the backend's turns array is the SOLE source of truth for
+  // the current question. sessionStorage is never consulted to decide it.
   useEffect(() => {
     if (!id) return;
     let active = true;
@@ -70,24 +122,29 @@ export function Interview() {
       .then((data) => {
         if (!active) return;
         if (data.status === "complete" || data.status === "completed") {
+          // Completed: clear any per-id sessionStorage so it can't leak into a
+          // future reused id, then hand off to the summary view.
+          clearDraft(id);
+          clearLegacyState(id);
           navigate(`/debrief/${id}/summary`, { replace: true });
           return;
         }
-        setDetail(data);
-        setTurns(data.turns ?? []);
+        // Drop any stale cache from a previous (possibly reused) id up front.
+        clearLegacyState(id);
 
-        const persisted = loadPersisted(id);
-        if (persisted) {
-          setCurrent(persisted.current);
-          setProgressCurrent(persisted.progressCurrent);
-          setIsFollowup(persisted.isFollowup);
-        } else {
-          const answeredTopics = new Set((data.turns ?? []).map((t) => t.topic));
-          const { current: c, progressCurrent: pc } = reconstructCurrent(answeredTopics);
-          setCurrent(c);
-          setProgressCurrent(pc);
-          setIsFollowup(false);
-        }
+        setDetail(data);
+        const allTurns = data.turns ?? [];
+        // Transcript shows only completed Q&A; the trailing pending turn (if
+        // any) is the current question, not a transcript entry.
+        setTurns(allTurns.filter(hasAnswer));
+
+        const derived = deriveCurrentFromTurns(allTurns);
+        setCurrent(derived.current);
+        setProgressCurrent(derived.progressCurrent);
+        setIsFollowup(derived.isFollowup);
+
+        // Restore only the in-progress typed answer (a same-session UI aid).
+        setAnswer(loadDraft(id));
       })
       .catch((err: unknown) => {
         if (active) setLoadError(errorMessage(err));
@@ -119,26 +176,25 @@ export function Interview() {
 
     try {
       const res = await submitAnswer(id, trimmed);
-      // Commit the just-answered turn to the running transcript.
+      // Commit the just-answered turn to the running transcript, and drop the
+      // now-submitted draft.
       setTurns((prev) => [...prev, answeredTurn]);
       setAnswer("");
+      clearDraft(id);
 
       const next = res.next;
       if (next.type === "complete") {
-        sessionStorage.removeItem(stateKey(id));
+        clearDraft(id);
+        clearLegacyState(id);
         navigate(`/debrief/${id}/summary`);
         return;
       }
 
-      const nextState: PersistedState = {
-        current: { topic: next.topic, question_text: next.question_text },
-        progressCurrent: next.progress?.current ?? progressCurrent,
-        isFollowup: next.type === "followup",
-      };
-      setCurrent(nextState.current);
-      setProgressCurrent(nextState.progressCurrent);
-      setIsFollowup(nextState.isFollowup);
-      persist(id, nextState);
+      // The API response is authoritative for the immediately-next question;
+      // hold it in React state only — never cache it as the "current" question.
+      setCurrent({ topic: next.topic, question_text: next.question_text });
+      setProgressCurrent(next.progress?.current ?? progressCurrent);
+      setIsFollowup(next.type === "followup");
       textareaRef.current?.focus();
     } catch (err: unknown) {
       setSubmitError(errorMessage(err));
@@ -147,6 +203,12 @@ export function Interview() {
       inFlightRef.current = false;
     }
   }, [answer, current, id, isFollowup, navigate, progressCurrent, turns.length]);
+
+  function onAnswerChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const value = e.target.value;
+    setAnswer(value);
+    saveDraft(id, value);
+  }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     // Only Cmd/Ctrl+Enter submits. Plain Enter is left to the textarea's
@@ -280,7 +342,7 @@ export function Interview() {
               ref={textareaRef}
               className="field"
               value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
+              onChange={onAnswerChange}
               onKeyDown={onKeyDown}
               placeholder="Provide a specific, complete account. Address who / what / when / where / why as relevant."
               rows={9}

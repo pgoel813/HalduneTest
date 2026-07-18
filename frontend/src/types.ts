@@ -24,7 +24,8 @@ export interface Turn {
   id: string;
   topic: string;
   question_text: string;
-  answer_text: string;
+  /** null for the trailing pending turn (the current, unanswered question). */
+  answer_text: string | null;
   is_followup: boolean;
   order_index: number;
 }
