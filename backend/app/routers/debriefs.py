@@ -1,8 +1,9 @@
 """API endpoints for post-mission debriefs (see CONTRACT.md)."""
 
 from datetime import date
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
 from sqlmodel import Session, select
 
@@ -111,10 +112,29 @@ def create_debrief(body: CreateDebriefRequest, session: Session = Depends(get_se
 
 
 @router.get("")
-def list_debriefs(session: Session = Depends(get_session)):
-    rows = session.exec(
-        select(DebriefSession).order_by(DebriefSession.created_at.desc())
-    ).all()
+def list_debriefs(
+    session: Session = Depends(get_session),
+    operator: Optional[str] = Query(
+        default=None, description="Filter by operator name (partial, case-insensitive)"
+    ),
+    status: Optional[str] = Query(
+        default=None, description="Filter by exact status"
+    ),
+    mission_name: Optional[str] = Query(
+        default=None, description="Filter by mission name (partial, case-insensitive)"
+    ),
+):
+    query = select(DebriefSession)
+    if operator is not None and operator.strip():
+        query = query.where(DebriefSession.operator_name.ilike(f"%{operator.strip()}%"))
+    if status is not None and status.strip():
+        query = query.where(DebriefSession.status == status.strip())
+    if mission_name is not None and mission_name.strip():
+        query = query.where(
+            DebriefSession.mission_name.ilike(f"%{mission_name.strip()}%")
+        )
+    query = query.order_by(DebriefSession.created_at.desc())
+    rows = session.exec(query).all()
     return [
         {
             "id": r.id,
@@ -144,6 +164,24 @@ def get_debrief(debrief_id: int, session: Session = Depends(get_session)):
         "turns": [_serialize_turn(t) for t in turns],
         "summary": debrief.summary,
     }
+
+
+@router.get("/{debrief_id}/transcript")
+def get_transcript(debrief_id: int, session: Session = Depends(get_session)):
+    debrief = session.get(DebriefSession, debrief_id)
+    if debrief is None:
+        raise HTTPException(status_code=404, detail="Debrief not found")
+
+    turns = _load_turns(session, debrief_id)
+    return [
+        {
+            "topic": t.topic,
+            "question_text": t.question_text,
+            "answer_text": t.answer_text,
+            "is_followup": t.is_followup,
+        }
+        for t in turns
+    ]
 
 
 @router.post("/{debrief_id}/answer")
