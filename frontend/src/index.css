@@ -1,0 +1,172 @@
+@import "tailwindcss";
+
+/*
+  Post-Mission Debrief Tool — tactical operator theme.
+  Dark, high-contrast, utilitarian. Sharp edges, monospace labels,
+  amber/steel/olive accents. No consumer gloss.
+*/
+@theme {
+  /* Surfaces — deep charcoal to raised slate */
+  --color-void: #08090c;
+  --color-base: #0d0f13;
+  --color-panel: #14171d;
+  --color-panel-2: #191d24;
+  --color-raised: #1f242c;
+
+  /* Structure */
+  --color-line: #262b33;
+  --color-line-bright: #343b45;
+
+  /* Text */
+  --color-ink: #e5e8ec;
+  --color-ink-dim: #99a2ae;
+  --color-ink-faint: #626b78;
+
+  /* Accents */
+  --color-amber: #d4a13a;
+  --color-amber-bright: #ecb845;
+  --color-steel: #5f8299;
+  --color-steel-bright: #7ba3bd;
+  --color-olive: #8a9a54;
+  --color-rust: #b45a3c;
+
+  /* Typography */
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+  /* Sharp corners — utilitarian, not bubbly */
+  --radius: 2px;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-base);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    /* faint grid texture, like a tactical display */
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  ::selection {
+    background: var(--color-amber);
+    color: #000;
+  }
+
+  /* Utilitarian scrollbars */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-void);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line-bright);
+    border: 2px solid var(--color-void);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-ink-faint);
+  }
+
+  textarea,
+  input,
+  button {
+    font-family: inherit;
+  }
+}
+
+/* Reusable primitives kept as component classes for consistency */
+@layer components {
+  .label-mono {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 11px;
+    color: var(--color-ink-faint);
+  }
+
+  .panel {
+    background-color: var(--color-panel);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 0.625rem 1.1rem;
+    border-radius: var(--radius);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+    white-space: nowrap;
+  }
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background-color: var(--color-amber);
+    color: #17130a;
+    border-color: var(--color-amber);
+    font-weight: 600;
+  }
+  .btn-primary:not(:disabled):hover {
+    background-color: var(--color-amber-bright);
+  }
+
+  .btn-ghost {
+    background-color: transparent;
+    color: var(--color-ink-dim);
+    border-color: var(--color-line-bright);
+  }
+  .btn-ghost:not(:disabled):hover {
+    color: var(--color-ink);
+    border-color: var(--color-ink-faint);
+    background-color: var(--color-panel-2);
+  }
+
+  .field {
+    width: 100%;
+    background-color: var(--color-void);
+    border: 1px solid var(--color-line-bright);
+    border-radius: var(--radius);
+    color: var(--color-ink);
+    padding: 0.7rem 0.85rem;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.12s ease;
+  }
+  .field:focus {
+    border-color: var(--color-steel);
+  }
+  .field::placeholder {
+    color: var(--color-ink-faint);
+  }
+}
