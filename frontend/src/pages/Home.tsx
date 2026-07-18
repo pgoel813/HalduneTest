@@ -5,8 +5,10 @@ import { formatDate, formatDateTime } from "../lib/format";
 import type { DebriefSummary } from "../types";
 import { StatusBadge } from "../components/StatusBadge";
 import { EmptyNotice, ErrorNotice, Loading } from "../components/States";
+import { useDocumentTitle } from "../lib/useDocumentTitle";
 
 export function Home() {
+  useDocumentTitle("Mission Log");
   const [debriefs, setDebriefs] = useState<DebriefSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,7 +45,11 @@ export function Home() {
             Debrief Records
           </h1>
         </div>
-        <Link to="/new" className="btn btn-primary no-underline">
+        <Link
+          to="/new"
+          className="btn btn-primary no-underline"
+          aria-label="Create a new debrief"
+        >
           + New Debrief
         </Link>
       </div>
@@ -55,8 +61,12 @@ export function Home() {
       )}
 
       {!error && debriefs !== null && debriefs.length > 0 && (
-        <div className="panel overflow-hidden">
-          <table className="w-full border-collapse" style={{ fontSize: 14 }}>
+        <div className="panel" style={{ overflowX: "auto" }}>
+          <table
+            className="w-full border-collapse"
+            style={{ fontSize: 14, minWidth: 640 }}
+          >
+            <caption className="sr-only">Past mission debriefs</caption>
             <thead>
               <tr>
                 {["MISSION", "OPERATOR", "MISSION DATE", "STATUS", "LOGGED"].map((h) => (

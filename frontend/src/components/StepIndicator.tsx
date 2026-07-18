@@ -8,9 +8,18 @@ interface StepIndicatorProps {
 /** Segmented progress bar across all topics — filled / active / pending. */
 export function StepIndicator({ current, total = TOTAL_TOPICS }: StepIndicatorProps) {
   const segments = Array.from({ length: total }, (_, i) => i + 1);
+  const clampedCurrent = Math.min(current, total);
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-1.5">
+      <div
+        className="flex items-center gap-1.5"
+        role="progressbar"
+        aria-label="Debrief topic progress"
+        aria-valuemin={1}
+        aria-valuemax={total}
+        aria-valuenow={clampedCurrent}
+        aria-valuetext={`Topic ${clampedCurrent} of ${total}`}
+      >
         {segments.map((n) => {
           const state = n < current ? "done" : n === current ? "active" : "pending";
           const color =
@@ -23,6 +32,7 @@ export function StepIndicator({ current, total = TOTAL_TOPICS }: StepIndicatorPr
             <div
               key={n}
               title={`Topic ${n}`}
+              aria-hidden
               style={{
                 flex: 1,
                 height: 4,

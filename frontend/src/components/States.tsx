@@ -2,6 +2,25 @@ interface MessageProps {
   message?: string;
 }
 
+/** Small spinner for use inside buttons while a request is in flight. */
+export function InlineSpinner() {
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: 12,
+        height: 12,
+        border: "2px solid currentColor",
+        borderTopColor: "transparent",
+        borderRadius: "50%",
+        display: "inline-block",
+        animation: "spin 0.7s linear infinite",
+        opacity: 0.85,
+      }}
+    />
+  );
+}
+
 /** Inline loading indicator with a scanning bar. */
 export function Loading({ message = "LOADING" }: MessageProps) {
   return (

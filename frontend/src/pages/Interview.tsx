@@ -11,7 +11,8 @@ import {
 import type { CurrentQuestion, DebriefDetail, Turn } from "../types";
 import { StepIndicator } from "../components/StepIndicator";
 import { Transcript } from "../components/Transcript";
-import { ErrorNotice, Loading } from "../components/States";
+import { ErrorNotice, InlineSpinner, Loading } from "../components/States";
+import { useDocumentTitle } from "../lib/useDocumentTitle";
 
 interface PersistedState {
   current: CurrentQuestion;
@@ -56,6 +57,9 @@ export function Interview() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const inFlightRef = useRef(false);
+
+  useDocumentTitle(detail?.mission_name ?? null);
 
   // Initial load: hydrate transcript + resolve the pending question.
   useEffect(() => {
@@ -94,10 +98,13 @@ export function Interview() {
   }, [id, navigate]);
 
   const handleSubmit = useCallback(async () => {
-    if (!current || submitting) return;
+    // Ref guard blocks re-entry even before the disabled button re-renders,
+    // preventing any double POST (e.g. rapid Cmd+Enter + click).
+    if (!current || inFlightRef.current) return;
     const trimmed = answer.trim();
     if (trimmed === "") return;
 
+    inFlightRef.current = true;
     setSubmitting(true);
     setSubmitError(null);
 
@@ -137,10 +144,13 @@ export function Interview() {
       setSubmitError(errorMessage(err));
     } finally {
       setSubmitting(false);
+      inFlightRef.current = false;
     }
-  }, [answer, current, id, isFollowup, navigate, progressCurrent, submitting, turns.length]);
+  }, [answer, current, id, isFollowup, navigate, progressCurrent, turns.length]);
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    // Only Cmd/Ctrl+Enter submits. Plain Enter is left to the textarea's
+    // default behavior (insert a newline) — we do not preventDefault it.
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
       void handleSubmit();
@@ -173,42 +183,44 @@ export function Interview() {
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-6">
       {/* Mission header strip */}
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-4">
-          <Link
-            to="/"
-            className="label-mono no-underline"
-            style={{ color: "var(--color-ink-faint)" }}
+      <div className="flex items-center flex-wrap gap-x-4 gap-y-2 mb-5">
+        <Link
+          to="/"
+          className="label-mono no-underline shrink-0"
+          style={{ color: "var(--color-ink-faint)" }}
+          aria-label="Back to mission log"
+        >
+          ← LOG
+        </Link>
+        <div
+          aria-hidden
+          className="shrink-0"
+          style={{ height: 20, width: 1, backgroundColor: "var(--color-line)" }}
+        />
+        <div className="flex items-baseline flex-wrap gap-x-3 gap-y-1 min-w-0">
+          <span
+            style={{ color: "var(--color-ink)", fontWeight: 600, fontSize: 15 }}
           >
-            ← LOG
-          </Link>
-          <div style={{ height: 20, width: 1, backgroundColor: "var(--color-line)" }} />
-          <div>
-            <span
-              style={{ color: "var(--color-ink)", fontWeight: 600, fontSize: 15 }}
-            >
-              {detail.mission_name}
-            </span>
-            <span
-              className="ml-3"
-              style={{
-                color: "var(--color-ink-faint)",
-                fontFamily: "var(--font-mono)",
-                fontSize: 12,
-              }}
-            >
-              {detail.operator_name} · {formatDate(detail.mission_date)}
-            </span>
-          </div>
+            {detail.mission_name}
+          </span>
+          <span
+            style={{
+              color: "var(--color-ink-faint)",
+              fontFamily: "var(--font-mono)",
+              fontSize: 12,
+            }}
+          >
+            {detail.operator_name} · {formatDate(detail.mission_date)}
+          </span>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">
         {/* Primary column: question + answer */}
-        <section className="flex flex-col gap-5">
+        <section className="flex flex-col gap-5" aria-label="Current question and response">
           <StepIndicator current={progressCurrent} total={TOTAL_TOPICS} />
 
-          <div className="panel p-6">
+          <div className="panel p-6" role="group" aria-live="polite" aria-atomic="true">
             <div className="flex items-center gap-3 mb-4">
               <span className="label-mono" style={{ color: "var(--color-amber)" }}>
                 TOPIC {Math.min(topicNum, TOTAL_TOPICS)}/{TOTAL_TOPICS}
@@ -254,12 +266,17 @@ export function Interview() {
             </p>
           </div>
 
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3" role="group" aria-label="Operator response">
             <div className="flex items-center justify-between">
-              <span className="label-mono">OPERATOR RESPONSE</span>
-              <span className="label-mono">{answer.trim().length} CHARS</span>
+              <label htmlFor="operator-response" className="label-mono">
+                OPERATOR RESPONSE
+              </label>
+              <span className="label-mono" aria-hidden>
+                {answer.trim().length} CHARS
+              </span>
             </div>
             <textarea
+              id="operator-response"
               ref={textareaRef}
               className="field"
               value={answer}
@@ -269,23 +286,31 @@ export function Interview() {
               rows={9}
               autoFocus
               disabled={submitting}
+              aria-label="Operator response to the current question"
+              aria-describedby="response-submit-hint"
+              aria-busy={submitting}
               style={{ resize: "vertical", lineHeight: 1.55 }}
             />
 
             {submitError && <ErrorNotice message={submitError} />}
 
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
               <span
+                id="response-submit-hint"
                 className="label-mono"
                 style={{ color: "var(--color-ink-faint)" }}
               >
                 CMD/CTRL + ENTER TO SUBMIT
               </span>
               <button
+                type="button"
                 className="btn btn-primary"
                 onClick={() => void handleSubmit()}
                 disabled={submitting || answer.trim() === ""}
+                aria-label="Submit response"
+                aria-busy={submitting}
               >
+                {submitting && <InlineSpinner />}
                 {submitting ? "Transmitting…" : "Submit Response"}
               </button>
             </div>

@@ -4,8 +4,10 @@ import Markdown from "react-markdown";
 import { completeDebrief, errorMessage } from "../lib/api";
 import { ErrorNotice, Loading } from "../components/States";
 import { markdownComponents } from "../components/markdownComponents";
+import { useDocumentTitle } from "../lib/useDocumentTitle";
 
 export function Summary() {
+  useDocumentTitle("After-Action Report");
   const { id = "" } = useParams();
   const [markdown, setMarkdown] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

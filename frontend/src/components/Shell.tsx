@@ -39,13 +39,16 @@ export function Shell({ children }: ShellProps) {
             DEBRIEF
           </span>
           <span
-            className="label-mono"
+            className="label-mono hidden sm:inline"
             style={{ letterSpacing: "0.16em", color: "var(--color-ink-faint)" }}
           >
             POST-MISSION REPORTING
           </span>
         </Link>
-        <span className="label-mono" style={{ color: "var(--color-ink-faint)" }}>
+        <span
+          className="label-mono hidden sm:inline"
+          style={{ color: "var(--color-ink-faint)" }}
+        >
           RESTRICTED // OPERATOR USE
         </span>
       </header>
